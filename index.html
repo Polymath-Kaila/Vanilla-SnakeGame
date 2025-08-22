@@ -12,6 +12,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Snake (Dev Kaila)</title>
+
   <style>
     :root {
       --bg: #0f1220;
@@ -75,10 +76,11 @@
     .toast p { margin: 0; color: #b8c0ff; }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <header>
-      <h1>Snake — Vanilla JS</h1>
+      <h1>Snake vanilla js -- kaila</h1>
       <div class="stats">
         <span class="chip">Score: <strong id="score">0</strong></span>
         <span class="chip">Best: <strong id="best">0</strong></span>
@@ -101,7 +103,8 @@
     <div class="controls" aria-label="Controls">
       <button id="btn-restart" title="Restart (R)">Restart</button>
       <button id="btn-pause" title="Pause (Space)" aria-pressed="false">Pause</button>
-      <button id="btn-slower" title="Slow Down (-)">− Speed</button>$1
+      <button id="btn-slower" title="Slow Down (-)">− Speed</button>
+      <button id="btn-faster" title="Speed Up (=)">+ Speed</button>
       <button id="btn-bot" title="Toggle Bot (B)" aria-pressed="false">Bot: Off</button>
     </div>
 
@@ -114,6 +117,8 @@
       <button id="right" title="Right (→)">→</button>
     </div>
   </div>
+
+
 
   <script>
     // ===== GAME CONFIG =====
