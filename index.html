@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0f1220">
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js");
+    }
+  </script>
+
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Snake (Vanilla JS)</title>
+  <title>Snake (Dev Kaila)</title>
   <style>
     :root {
       --bg: #0f1220;
@@ -93,8 +101,8 @@
     <div class="controls" aria-label="Controls">
       <button id="btn-restart" title="Restart (R)">Restart</button>
       <button id="btn-pause" title="Pause (Space)" aria-pressed="false">Pause</button>
-      <button id="btn-slower" title="Slow Down (-)">− Speed</button>
-      <button id="btn-faster" title="Speed Up (=)">+ Speed</button>
+      <button id="btn-slower" title="Slow Down (-)">− Speed</button>$1
+      <button id="btn-bot" title="Toggle Bot (B)" aria-pressed="false">Bot: Off</button>
     </div>
 
     <div class="mobile-pad" aria-label="D-pad">
@@ -128,7 +136,7 @@
     canvas.width = COLS * GRID; canvas.height = ROWS * GRID;
 
     // ===== GAME STATE =====
-    let snake, dir, nextDir, food, score, best, timerId, speedMs, playing, alive;
+    let snake, dir, nextDir, food, score, best, timerId, speedMs, playing, alive, botActive = false;
 
     function resetGame() {
       snake = [ {x: 8, y: 10}, {x: 7, y: 10}, {x: 6, y: 10} ];
@@ -165,6 +173,7 @@
       clearInterval(timerId);
       timerId = setInterval(() => {
         if (!playing) return;
+        if (botActive && alive) planBotMove();
         step();
         draw();
       }, speedMs);
@@ -252,6 +261,121 @@
       ctx.closePath();
     }
 
+    // ===== BOT (Autoplay) =====
+    function toggleBot(force) {
+      const next = typeof force === 'boolean' ? force : !botActive;
+      botActive = next;
+      updateBotButton();
+      if (botActive && !playing && alive) togglePause(false); // auto-resume when enabling bot
+    }
+    function updateBotButton() {
+      const btn = document.getElementById('btn-bot');
+      if (!btn) return;
+      btn.setAttribute('aria-pressed', botActive ? 'true' : 'false');
+      btn.textContent = botActive ? 'Bot: On' : 'Bot: Off';
+    }
+
+    function planBotMove() {
+      // compute next direction via BFS path to food; fallback to a safe move
+      const path = bfsPathToFood();
+      if (path && path.length > 1) {
+        const head = snake[0];
+        const nxt = path[1];
+        const dx = Math.sign(nxt.x - head.x);
+        const dy = Math.sign(nxt.y - head.y);
+        if (!(dx === -dir.x && dy === -dir.y)) {
+          nextDir = { x: dx, y: dy };
+        }
+      } else {
+        // fallback: pick first safe direction (prefers current direction)
+        const options = prefDirs(dir);
+        for (const d of options) {
+          const nx = snake[0].x + d.x;
+          const ny = snake[0].y + d.y;
+          if (isCellSafe(nx, ny)) { nextDir = d; break; }
+        }
+      }
+    }
+
+    function bfsPathToFood() {
+      const start = snake[0];
+      const goal = food;
+
+      const key = (x,y) => `${x},${y}`;
+      const q = [];
+      const seen = new Set([key(start.x,start.y)]);
+      const prev = new Map();
+
+      q.push(start);
+
+      while (q.length) {
+        const cur = q.shift();
+        if (cur.x === goal.x && cur.y === goal.y) break;
+        for (const n of neighbors(cur)) {
+          const k = key(n.x,n.y);
+          if (seen.has(k)) continue;
+          if (!isCellPassable(n.x, n.y)) continue;
+          seen.add(k);
+          prev.set(k, cur);
+          q.push(n);
+        }
+      }
+
+      // reconstruct
+      const gk = key(goal.x, goal.y);
+      if (!prev.has(gk) && !(start.x === goal.x && start.y === goal.y)) return null;
+      const path = [];
+      let cur = goal;
+      path.push({x: cur.x, y: cur.y});
+      while (!(cur.x === start.x && cur.y === start.y)) {
+        const p = prev.get(key(cur.x, cur.y));
+        if (!p) return null; // no path
+        path.push({x: p.x, y: p.y});
+        cur = p;
+      }
+      path.reverse();
+      return path;
+    }
+
+    function neighbors(p) {
+      const out = [ {x: p.x+1, y: p.y}, {x: p.x-1, y: p.y}, {x: p.x, y: p.y+1}, {x: p.x, y: p.y-1} ];
+      return out.filter(n => n.x >= 0 && n.x < COLS && n.y >= 0 && n.y < ROWS);
+    }
+
+    function isCellPassable(x, y) {
+      // Treat the snake body as obstacles, EXCEPT the tail (it will move away unless we eat)
+      const tailIndex = snake.length - 1;
+      for (let i = 0; i < snake.length; i++) {
+        const s = snake[i];
+        if (s.x === x && s.y === y) {
+          // allow stepping into current tail cell as it likely vacates
+          return i === tailIndex && !(x === food.x && y === food.y);
+        }
+      }
+      return true;
+    }
+
+    function isCellSafe(x, y) {
+      if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+      // cannot move into any snake cell (including tail for safety in fallback)
+      return !snake.some(seg => seg.x === x && seg.y === y);
+    }
+
+    function prefDirs(d) {
+      // prioritize continuing straight, then right, left, opposite (simple wall-following bias)
+      const right = { x: d.y, y: -d.x };
+      const left  = { x: -d.y, y: d.x };
+      const opp   = { x: -d.x, y: -d.y };
+      return [d, right, left, opp];
+    }
+
+    // stop bot on game over
+    const _oldGameOver = gameOver;
+    gameOver = function () {
+      toggleBot(false);
+      _oldGameOver();
+    };
+
     // ===== INPUT =====
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
@@ -259,6 +383,7 @@
       if (k === 'r') { resetGame(); }
       if (k === '=' || k === '+') { speedMs = Math.max(SPEED_MIN_MS, speedMs - SPEED_STEP_MS); tickLoop(); }
       if (k === '-' || k === '_') { speedMs = Math.min(SPEED_MAX_MS, speedMs + SPEED_STEP_MS); tickLoop(); }
+      if (k === 'b') { toggleBot(); }
 
       // arrows / wasd
       if (['arrowup','w'].includes(k)) enqueueDir(0, -1);
@@ -276,6 +401,8 @@
     document.getElementById('btn-pause').onclick = togglePause;
     document.getElementById('btn-faster').onclick = () => { speedMs = Math.max(SPEED_MIN_MS, speedMs - SPEED_STEP_MS); tickLoop(); };
     document.getElementById('btn-slower').onclick = () => { speedMs = Math.min(SPEED_MAX_MS, speedMs + SPEED_STEP_MS); tickLoop(); };
+    const btnBot = document.getElementById('btn-bot');
+    if (btnBot) btnBot.onclick = () => toggleBot();
 
     function enqueueDir(x, y) {
       // prevent reversing into yourself in a single frame
